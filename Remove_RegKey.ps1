@@ -29,7 +29,7 @@ New-PSDrive -PSProvider Registry -Name HKUDefaultHive -Root HKEY_USERS
 Reg Load "HKU\DefaultHive" "C:\Users\Default\NTUser.dat"
  
 #Set UniformDefaultHive Variable
-$UniformKey = "HKUDefaultHive:\DefaultHive\Software"
+$UniformKey = "HKUDefaultHive:\DefaultHive\Software\Unimap_moca"
 
 #Reset test key value
 $Value=$Null
