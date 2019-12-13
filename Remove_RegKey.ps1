@@ -1,93 +1,49 @@
 
-#-------------- Remove Default User Hive Entry --------------
+#----------- Remove Uniform Key from All Users and Default Hive -----------#
 
-#Set test value
-$ValuePSDrive = $Null
+#Credit "Monte Elias Hazboun" for script cleanup
+#We need our error to be terminating for our try/catch to work so we use erroraction stop
 
-#Set Default PS Drive Name
-$DefHiveValue = "HKUDefaultHive"
-
-#Remove PSDrive HKUDefaultHive if it is already loaded
-If (Test-Path $DefHiveValue) {
-    Try {
-        $ValuePSDrive = Get-PSDrive -Name $DefHiveValue | Select-Object Name
-    }
-    Catch {
-        $ErrorActionPreference = "silentlycontinue"
-    }
-    Finally {
-        If ($ValuePSDrive -eq $DefHiveValue) {
-            Remove-PSDrive $DefHiveValue
-        }
-    }
+try {
+    New-PSDrive -Name HKU -PSProvider Registry -Root HKEY_USERS -erroraction stop | Out-Null
+}
+catch [System.Management.Automation.SessionStateException] {
+    Write-Warning "Drive Already exists"
 }
 
-#Create PSDrive for HKU
-New-PSDrive -PSProvider Registry -Name HKUDefaultHive -Root HKEY_USERS
- 
-#Load Default User Hive
-Reg Load "HKU\DefaultHive" "C:\Users\Default\NTUser.dat"
- 
-#Set UniformDefaultHive Variable
-$UniformKey = "HKUDefaultHive:\DefaultHive\Software"
+#Set location to PSDrive
+Set-Location HKU:
 
-#Reset test key value
-$Value=$Null
-
-#Test if key exists and remove it true
-If (Test-Path $UniformKey) {
-    Try {
-        $Value = Get-Item -Path $UniformKey
-    }
-    Catch {
-        $ErrorActionPreference = "silentlycontinue"
-    }
-    Finally {
-        If ($Value -eq $UniformKey) {
-            Remove-Item -Path $UniformKey -Force | Out-Null
-        }
-    }
-}
-
-#Unload Hive
-Reg Unload 'HKU\DefaultHive'
- 
-#Remove PSDrive HKUDefaultHive
-Remove-PSDrive "HKUDefaultHive"
-#----------------------------
+#Set variable for User SID selection
+$SID = 'S-1-5-21-\d+-\d+\-\d+\-\d+$'
 
 #Set variable for Uniform registry key
-$RegistryPath = "Software\Unimap_moca"
+$RegistryKey = "\Software\Unimap_moca"
 
-#Set variable for User profiles in registry
-$SID = 'S-1-5-21-\d+-\d+\-\d+\-\d+$'
-$UserRegistryList = Get-ChildItem Registry::'HKU' | Select Name | Where {$_.Name -match $SID }
+#Get existing User and Default Hives
+$UserHives = Get-ChildItem | Where-Object { 
+    $_.Name -Match $sid -or $_.Name -Match "Default" 
+}
 
-#Remove Uniform reg keys from every local user registry
-Foreach ($UserRegistry in $UserRegistryList){
-
-    New-PSDrive -PSProvider Registry -Name HKU -Root HKEY_USERS
+#Loop through each profile and remove the Registry Key
+Foreach ($UserRegistry in $UserHives) {
 
     #Set variable for key to test
-    $RegistryTarget = (Join-Path $UserRegistry.Name $RegistryPath) -replace 'HKEY_USERS', 'HKU:'
-    write-host $RegistryTarget
-    Test-Path $RegistryTarget
-
-    #Reset test variable value
-    $UserValue = $Null
+    $RegistryTarget = (Join-Path $UserRegistry.Name $RegistryKey)
 
     If (Test-Path $RegistryTarget) {
         Try {
-            $UserValue = Test-Path $RegistryTarget
+            Remove-Item -Path Registry::$RegistryTarget -Recurse -Force -ErrorAction Stop
+        }
+        Catch [System.Management.Automation.ItemNotFoundException] {
+            Write-Warning "$registrytarget was somehow deleted between the time we ran the test path and now."
         }
         Catch {
-            $ErrorActionPreference = "silentlycontinue"
-        }
-        Finally {
-            If ($UserValue) {
-                Remove-Item -Path $RegistryTarget -recurse -Force | Out-Null
-            }
+            Write-Warning "Some other error $($error[0].Exception). Most likely access denied"
         }
     }
-    Remove-PSDrive "HKU"
 }
+
+#Remove PSDrive HKU
+Remove-PSDrive "HKU" -Force
+#----------------------#
